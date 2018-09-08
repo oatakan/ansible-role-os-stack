@@ -58,7 +58,7 @@ outputs:
     description: {{ node.name }} public IP address and ansible_port
     value:
       floating_ip: { get_attr: [ {{ node.name }}_floating_ip, floating_ip_address ] }
-      ansible_port: {% if node.os_type is defined and node.os_type|lower=='windows' %}{{ node.ansible_port | default('5986') }}{% else %}{{ node.ansible_port | default('22') }}{% endif %}
+      ansible_port: {% if node.os_type is defined and node.os_type|lower=='windows' %}{{ node.ansible_port | default('5986') }}{% else %}{{ node.ansible_port | default(ansible_port) | default('22') }}{% endif %}
 
 {% endfor %}
 {% endif %}
