@@ -1,0 +1,14 @@
+---
+
+- include_tasks: provision.yml
+  when: role_action == 'provision'
+
+- include_tasks: deprovision.yml
+  when: role_action == 'deprovision'
+
+
+
+
+
+
+

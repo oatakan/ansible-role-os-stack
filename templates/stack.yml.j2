@@ -1,0 +1,64 @@
+heat_template_version: 2013-05-23
+
+description: >
+  Deploys instance(s).
+
+parameters:
+  public_network_id:
+    type: string
+    description: >
+      ID of an existing public network where a floating IP will be
+      allocated.
+
+{% if nodes is defined %}
+resources:
+{% for node in nodes %}
+{% for nic in node.nics %}
+  {{ node.name }}_port_{{ loop.index }}:
+    type: OS::Neutron::Port
+    properties:
+      network_id: {{ (openstack_networks |  selectattr('name', 'search', nic['net-name']) | list | first).id }}
+
+{% endfor %}
+
+  {{ node.name }}_floating_ip:
+    type: OS::Neutron::FloatingIP
+    depends_on: {{ node.name }}_port_1
+    properties:
+      floating_network_id: { get_param: public_network_id }
+      port_id: { get_resource: {{ node.name }}_port_1 }
+
+  {{ node.name }}:
+    type: OS::Nova::Server
+    depends_on: [ {% for nic in node.nics %}{{ node.name }}_port_{{ loop.index }},{% endfor %} ]
+    properties:
+      image: {{ node.image }}
+      flavor: {{ node.flavor }}
+      key_name: {{ node.key_name }}
+      networks:
+{% for nic in node.nics %}
+        - port: { get_resource: {{ node.name }}_port_{{ loop.index }} }
+{% endfor %}
+{% if node.user_data is defined %}
+      user_data_format: RAW
+      user_data: |
+        {{ node.user_data | replace('\n', '') }}
+
+{% elif node.os_type is defined and node.os_type|lower=='windows' %}
+      user_data_format: RAW
+      user_data: |
+        {{ lookup('template', 'templates/win-userdata.txt.j2') | replace('\n', '') }}
+
+{% endif %}
+
+{% endfor %}
+outputs:
+{% for node in nodes %}
+  {{ node.name }}_public_ip:
+    description: {{ node.name }} public IP address and ansible_port
+    value:
+      floating_ip: { get_attr: [ {{ node.name }}_floating_ip, floating_ip_address ] }
+      ansible_port: {% if node.os_type is defined and node.os_type|lower=='windows' %}{{ node.ansible_port | default('5986') }}{% else %}{{ node.ansible_port | default('22') }}{% endif %}
+
+{% endfor %}
+{% endif %}

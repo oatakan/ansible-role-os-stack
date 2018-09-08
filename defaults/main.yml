@@ -1,0 +1,12 @@
+---
+
+role_action: provision
+
+env: test
+
+instance_wait_retry_limit: 300
+instance_wait_connection_timeout: 300
+
+pause_in_seconds: 60
+
+public_network_name: public
