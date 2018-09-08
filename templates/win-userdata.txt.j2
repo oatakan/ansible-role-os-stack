@@ -1,4 +1,3 @@
-<powershell>
 $admin = [adsi]("WinNT://./administrator, user")
 {% if ansible_password is defined %}
 $admin.PSBase.Invoke("SetPassword", "{{ ansible_password }}")
@@ -6,4 +5,3 @@ $admin.PSBase.Invoke("SetPassword", "{{ ansible_password }}")
 & $([scriptblock]::Create((New-Object Net.WebClient).DownloadString("https://raw.githubusercontent.com/ansible/ansible/devel/examples/scripts/ConfigureRemotingForAnsible.ps1"))) -ForceNewSSLCert -EnableCredSSP
 Enable-WSManCredSSP -Role Server -Force
 Set-Item -Path "WSMan:\localhost\Service\Auth\CredSSP" -Value $true
-</powershell>
