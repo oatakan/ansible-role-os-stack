@@ -45,7 +45,6 @@ resources:
         {{ node.user_data | replace('\n', '') }}
 
 {% elif node.os_type is defined and node.os_type|lower=='windows' %}
-      user_data_format: RAW
       user_data: |
         {{ lookup('template', 'templates/win-userdata.txt.j2') | replace('\n', '') }}
 
