@@ -40,13 +40,12 @@ resources:
         - port: { get_resource: {{ node.name }}_port_{{ loop.index }} }
 {% endfor %}
 {% if node.user_data is defined %}
-      user_data_format: RAW
       user_data: |
-        {{ node.user_data | replace('\n', '') }}
+        {{ node.user_data | replace('\n', '\n        ') }}
 
 {% elif node.os_type is defined and node.os_type|lower=='windows' %}
       user_data: |
-        {{ lookup('template', 'templates/win-userdata.txt.j2') | replace('\n', '') }}
+        {{ lookup('template', 'templates/win-userdata.txt.j2') | replace('\n', '\n        ') }}
 
 {% endif %}
 
