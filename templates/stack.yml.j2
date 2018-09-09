@@ -35,6 +35,10 @@ resources:
       image: {{ node.image }}
       flavor: {{ node.flavor }}
       key_name: {{ node.key_name }}
+      metadata:
+        hostname: "{{ node.name }}"
+        role: "{{ node.role }}"
+        app_name: "{{ node.app_name }}"
       networks:
 {% for nic in node.nics %}
         - port: { get_resource: {{ node.name }}_port_{{ loop.index }} }
