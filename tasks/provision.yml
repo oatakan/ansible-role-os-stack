@@ -57,7 +57,7 @@
 - rescue:
 
   - debug:
-    msg: 'There was an issue creating stack'
+      msg: 'There was an issue creating stack'
 
 - always:
 

@@ -5,10 +5,3 @@
 
 - include_tasks: deprovision.yml
   when: role_action == 'deprovision'
-
-
-
-
-
-
-
