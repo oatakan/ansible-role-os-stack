@@ -49,8 +49,7 @@ resources:
 
 {% elif node.os_type is defined and node.os_type|lower=='windows' %}
       user_data: |
-        #ps1
-        Set-Content -Path C:\test.xml.txt -Value "some text"
+        {{ lookup('template', 'templates/test.j2') | replace('\n', '\n        ') }}
 
 {% endif %}
 
