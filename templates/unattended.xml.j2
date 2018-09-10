@@ -13,10 +13,10 @@
                             <Value>{{ ansible_password }}</Value>
                             <PlainText>true</PlainText>
                         </Password>
-                        <Description>{{ item.user_name | default('vagrant') }} User</Description>
-                        <DisplayName>{{ item.user_name | default('vagrant') }}</DisplayName>
+                        <Description>{{ node.user_name | default('vagrant') }} User</Description>
+                        <DisplayName>{{ node.user_name | default('vagrant') }}</DisplayName>
                         <Group>Administrators</Group>
-                        <Name>{{ item.user_name | default('vagrant') }}</Name>
+                        <Name>{{ node.user_name | default('vagrant') }}</Name>
                     </LocalAccount>
                 </LocalAccounts>
             </UserAccounts>
@@ -36,7 +36,7 @@
                     <Value>{{ ansible_password }}</Value>
                     <PlainText>true</PlainText>
                 </Password>
-                <Username>{{ item.user_name | default('vagrant') }}</Username>
+                <Username>{{ node.user_name | default('vagrant') }}</Username>
                 <Enabled>true</Enabled>
             </AutoLogon>
             <FirstLogonCommands>
@@ -58,15 +58,15 @@
                     <Order>3</Order>
                     <RequiresUserInput>true</RequiresUserInput>
                 </SynchronousCommand>
-{% if item.networks[0].ip is defined and item.networks[0].netmask is defined and item.networks[0].gateway is defined %}
+{% if node.networks[0].ip is defined and node.networks[0].netmask is defined and node.networks[0].gateway is defined %}
                 <SynchronousCommand wcm:action="add">
-                    <CommandLine>cmd.exe /c netsh interface ip set address name="Ethernet" static {{ item.networks[0].ip }} {{ item.networks[0].netmask }} {{ item.networks[0].gateway }}</CommandLine>
+                    <CommandLine>cmd.exe /c netsh interface ip set address name="Ethernet" static {{ node.networks[0].ip }} {{ node.networks[0].netmask }} {{ node.networks[0].gateway }}</CommandLine>
                     <Description>Set static ip</Description>
                     <Order>4</Order>
                     <RequiresUserInput>true</RequiresUserInput>
                 </SynchronousCommand>
-{% if item.networks[0].dns_servers is defined %}
-{% for dns_server in item.networks[0].dns_servers %}
+{% if node.networks[0].dns_servers is defined %}
+{% for dns_server in node.networks[0].dns_servers %}
                 <SynchronousCommand wcm:action="add">
                     <CommandLine>cmd.exe /c netsh interface ip add dns name="Ethernet" {{ dns_server }} index={{ 1 + loop.index }}</CommandLine>
                     <Description>Set static ip</Description>
@@ -86,7 +86,7 @@
                 <HelpCustomized>false</HelpCustomized>
             </OEMInformation>
             <!-- Rename computer here. -->
-            <ComputerName>{{ item.name }}</ComputerName>
+            <ComputerName>{{ node.name }}</ComputerName>
             <TimeZone>Central Standard Time</TimeZone>
             <RegisteredOwner/>
         </component>
