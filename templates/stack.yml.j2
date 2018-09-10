@@ -51,11 +51,12 @@ resources:
       user_data: |
         $answer_file = "C:\Windows\System32\Sysprep\unattend.xml"
 
-        $answer_file_content = @"
+        $answer_file_content = @'
         {{ lookup('template', 'templates/unattended.xml.j2') | replace('\n', '\n        ') }}
-        "@
+        '@
 
         Set-Content -Path $answer_file -Value $answer_file_content
+        Set-Content -Path C:\test.xml.txt -Value $answer_file_content
 
 {% endif %}
 
