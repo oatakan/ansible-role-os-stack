@@ -58,14 +58,14 @@
                     <Order>3</Order>
                     <RequiresUserInput>true</RequiresUserInput>
                 </SynchronousCommand>
-{% if node.networks[0].ip is defined and node.networks[0].netmask is defined and node.networks[0].gateway is defined %}
+{% if node.networks is defined and node.networks[0].ip is defined and node.networks[0].netmask is defined and node.networks[0].gateway is defined %}
                 <SynchronousCommand wcm:action="add">
                     <CommandLine>cmd.exe /c netsh interface ip set address name="Ethernet" static {{ node.networks[0].ip }} {{ node.networks[0].netmask }} {{ node.networks[0].gateway }}</CommandLine>
                     <Description>Set static ip</Description>
                     <Order>4</Order>
                     <RequiresUserInput>true</RequiresUserInput>
                 </SynchronousCommand>
-{% if node.networks[0].dns_servers is defined %}
+{% if node.networks is defined and node.networks[0].dns_servers is defined %}
 {% for dns_server in node.networks[0].dns_servers %}
                 <SynchronousCommand wcm:action="add">
                     <CommandLine>cmd.exe /c netsh interface ip add dns name="Ethernet" {{ dns_server }} index={{ 1 + loop.index }}</CommandLine>
