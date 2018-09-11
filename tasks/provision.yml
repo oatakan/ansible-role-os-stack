@@ -74,7 +74,7 @@
       - deploy.stack is defined
       - deploy.stack.outputs is defined
       - "'public_ip' in item.output_key"
-      - os_type|lower == 'windows' or item.output_value.ansible_port == '5986'
+      - item.output_value.ansible_port == '5986'
 
 - rescue:
 
