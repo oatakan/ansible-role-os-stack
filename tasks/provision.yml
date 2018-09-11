@@ -54,7 +54,7 @@
       - deploy.stack.outputs is defined
       - "'public_ip' in item.output_key"
 
-  - name: waiting for systems to be available for connection
+  - name: waiting for windows systems to be available for connection
     wait_for_connection:
     vars:
       ansible_port: 5986
