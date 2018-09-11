@@ -35,9 +35,6 @@ resources:
       image: {{ node.image }}
       flavor: {{ node.flavor }}
       key_name: {{ node.key_name }}
-{% if ansible_password is defined %}
-      admin_pass: {{ ansible_password }}
-{% endif %}
       metadata:
         hostname: "{{ node.name }}"
         role: "{{ node.role }}"
