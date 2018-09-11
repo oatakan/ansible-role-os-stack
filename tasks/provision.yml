@@ -54,6 +54,27 @@
       - deploy.stack.outputs is defined
       - "'public_ip' in item.output_key"
 
+  - name: wait for systems to be available for connections
+    setup:
+      gather_subset: !all
+    vars:
+      ansible_port: 5986
+      ansible_connection: winrm
+      ansible_winrm_transport: credssp
+      ansible_winrm_server_cert_validation: ignore
+    delegate_to: "{{ item.output_value.floating_ip }}"
+    register: wait_for_connection
+    until: wait_for_connection is success
+    delay: 3
+    retries: 30
+    when:
+      - nodes is defined
+      - deploy is defined
+      - deploy.stack is defined
+      - deploy.stack.outputs is defined
+      - "'public_ip' in item.output_key"
+      - os_type|lower == 'windows' or item.output_value.ansible_port == '5986'
+
 - rescue:
 
   - debug:
