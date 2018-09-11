@@ -35,6 +35,7 @@ resources:
       image: {{ node.image }}
       flavor: {{ node.flavor }}
       key_name: {{ node.key_name }}
+      config_drive: True
       metadata:
         hostname: "{{ node.name }}"
         role: "{{ node.role }}"
@@ -45,11 +46,14 @@ resources:
 {% endfor %}
 {% if node.user_data is defined %}
       user_data: |
-        {{ node.user_data | replace('\n', '\n        ') }}
+{{ node.user_data | indent(8, True) }}
 
 {% elif node.os_type is defined and node.os_type|lower=='windows' %}
+{% set user_data_content %}
+{% include 'templates/unattended.xml.j2' %}
+{% endset %}
       user_data: |
-        {% include 'templates/unattended.xml.j2' | replace('\n', '\n        ') %}
+{{ user_data_content | indent(8, True) }}
 
 {% endif %}
 
