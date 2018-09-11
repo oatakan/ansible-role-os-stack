@@ -55,18 +55,13 @@
       - "'public_ip' in item.output_key"
 
   - name: waiting for systems to be available for connection
-    setup:
-      gather_subset: '!all'
+    wait_for_connection:
     vars:
       ansible_port: 5986
       ansible_connection: winrm
       ansible_winrm_transport: credssp
       ansible_winrm_server_cert_validation: ignore
     delegate_to: "{{ item.output_value.floating_ip }}"
-    register: wait_for_connection
-    until: wait_for_connection is success
-    delay: 3
-    retries: 30
     with_items: "{{ deploy.stack.outputs }}"
     when:
       - nodes is defined
@@ -75,6 +70,28 @@
       - deploy.stack.outputs is defined
       - "'public_ip' in item.output_key"
       - item.output_value.ansible_port == 5986
+
+#  - name: waiting for systems to be available for connection
+#    setup:
+#      gather_subset: '!all'
+#    vars:
+#      ansible_port: 5986
+#      ansible_connection: winrm
+#      ansible_winrm_transport: credssp
+#      ansible_winrm_server_cert_validation: ignore
+#    delegate_to: "{{ item.output_value.floating_ip }}"
+#    register: wait_for_connection
+#    until: wait_for_connection is success
+#    delay: 3
+#    retries: 30
+#    with_items: "{{ deploy.stack.outputs }}"
+#    when:
+#      - nodes is defined
+#      - deploy is defined
+#      - deploy.stack is defined
+#      - deploy.stack.outputs is defined
+#      - "'public_ip' in item.output_key"
+#      - item.output_value.ansible_port == 5986
 
 - rescue:
 
