@@ -50,7 +50,7 @@ resources:
 
 {% elif node.os_type is defined and node.os_type|lower=='windows' %}
 {% set user_data_content %}
-{% include 'templates/unattended.xml.j2' %}
+{% include 'templates/windows-userdata.txt.j2' %}
 {% endset %}
       user_data: |
 {{ user_data_content | indent(8, True) }}
