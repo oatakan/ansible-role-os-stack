@@ -54,7 +54,7 @@
       - deploy.stack.outputs is defined
       - "'public_ip' in item.output_key"
 
-  - name: wait for systems to be available for connections
+  - name: waiting for systems to be available for connection
     setup:
       gather_subset: '!all'
     vars:
@@ -67,6 +67,7 @@
     until: wait_for_connection is success
     delay: 3
     retries: 30
+    with_items: "{{ deploy.stack.outputs }}"
     when:
       - nodes is defined
       - deploy is defined
