@@ -56,7 +56,7 @@
 
   - name: wait for systems to be available for connections
     setup:
-      gather_subset: !all
+      gather_subset: '!all'
     vars:
       ansible_port: 5986
       ansible_connection: winrm
