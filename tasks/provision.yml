@@ -43,7 +43,7 @@
 
   - name: waiting for servers to come online
     wait_for:
-      host: "{{ item.output_value.floating_ip }}"
+      host: "{{ item.output_value.public_ip }}"
       port: "{{ item.output_value.ansible_port | default(ansible_port) }}"
       timeout: "{{ instance_wait_connection_timeout }}"
     with_items: "{{ deploy.stack.outputs }}"
@@ -61,7 +61,7 @@
       ansible_connection: winrm
       ansible_winrm_transport: credssp
       ansible_winrm_server_cert_validation: ignore
-    delegate_to: "{{ item.output_value.floating_ip }}"
+    delegate_to: "{{ item.output_value.public_ip }}"
     with_items: "{{ deploy.stack.outputs }}"
     ignore_errors: yes
     when:

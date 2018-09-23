@@ -21,12 +21,14 @@ resources:
 
 {% endfor %}
 
+{% if node.auto_ip is not defined or (node.auto_ip is defined and node.auto_ip) %}
   {{ node.name }}_floating_ip:
     type: OS::Neutron::FloatingIP
     depends_on: {{ node.name }}_port_1
     properties:
       floating_network_id: { get_param: public_network_id }
       port_id: { get_resource: {{ node.name }}_port_1 }
+{% endif %}
 
   {{ node.name }}:
     type: OS::Nova::Server
@@ -59,11 +61,19 @@ resources:
 {% endfor %}
 outputs:
 {% for node in nodes %}
+{% if node.auto_ip is not defined or (node.auto_ip is defined and node.auto_ip) %}
   {{ node.name }}_public_ip:
     description: {{ node.name }} public IP address and ansible_port
     value:
-      floating_ip: { get_attr: [ {{ node.name }}_floating_ip, floating_ip_address ] }
+      public_ip: { get_attr: [ {{ node.name }}_floating_ip, floating_ip_address ] }
       ansible_port: {% if node.os_type is defined and node.os_type|lower=='windows' %}{{ node.ansible_port | default('5986') }}{% else %}{{ node.ansible_port | default(ansible_port) | default('22') }}{% endif %}
+{% elif %}
+{{ node.name }}_public_ip:
+    description: {{ node.name }} public IP address and ansible_port
+    value:
+      public_ip: { get_attr: [{{ node.name }}, networks, net0, 0]}
+      ansible_port: {% if node.os_type is defined and node.os_type|lower=='windows' %}{{ node.ansible_port | default('5986') }}{% else %}{{ node.ansible_port | default(ansible_port) | default('22') }}{% endif %}
+{% endif %}
 
 {% endfor %}
 {% endif %}
