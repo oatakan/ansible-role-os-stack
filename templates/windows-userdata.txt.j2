@@ -1,6 +1,5 @@
 <powershell>
 $admin = [adsi]("WinNT://./administrator, user")
-Rename-Computer -NewName {{ node.name }}
 {% if ansible_password is defined %}
 $admin.PSBase.Invoke("SetPassword", "{{ ansible_password }}")
 {% elif ansible_ssh_password is defined %}
@@ -10,4 +9,5 @@ $admin.PSBase.Invoke("SetPassword", "{{ ansible_ssh_password }}")
 Enable-WSManCredSSP -Role Server -Force
 Set-Item -Path "WSMan:\localhost\Service\Auth\CredSSP" -Value $true
 Resize-Partition -DriveLetter c -Size (Get-PartitionSupportedSize -DriveLetter c).sizeMax -ErrorAction SilentlyContinue
+Rename-Computer -NewName {{ node.name }}
 </powershell>
