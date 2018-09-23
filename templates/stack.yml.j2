@@ -20,7 +20,6 @@ resources:
       network_id: {{ (openstack_networks |  selectattr('name', 'search', nic['net-name']) | list | first).id }}
 
 {% endfor %}
-
 {% if node.auto_ip is not defined or (node.auto_ip is defined and node.auto_ip) %}
   {{ node.name }}_floating_ip:
     type: OS::Neutron::FloatingIP
@@ -67,11 +66,11 @@ outputs:
     value:
       public_ip: { get_attr: [ {{ node.name }}_floating_ip, floating_ip_address ] }
       ansible_port: {% if node.os_type is defined and node.os_type|lower=='windows' %}{{ node.ansible_port | default('5986') }}{% else %}{{ node.ansible_port | default(ansible_port) | default('22') }}{% endif %}
-{% elif %}
+{% else %}
   {{ node.name }}_public_ip:
     description: {{ node.name }} public IP address and ansible_port
     value:
-      public_ip: { get_attr: [{{ node.name }}, networks, net0, 0]}
+      public_ip: { get_attr: [ {{ node.name }}, networks, net0, 0 ] }
       ansible_port: {% if node.os_type is defined and node.os_type|lower=='windows' %}{{ node.ansible_port | default('5986') }}{% else %}{{ node.ansible_port | default(ansible_port) | default('22') }}{% endif %}
 {% endif %}
 
