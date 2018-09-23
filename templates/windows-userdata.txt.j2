@@ -1,5 +1,6 @@
 <powershell>
 $admin = [adsi]("WinNT://./administrator, user")
+Rename-Computer -NewName {{ node.name }}
 {% if ansible_password is defined %}
 $admin.PSBase.Invoke("SetPassword", "{{ ansible_password }}")
 {% elif ansible_ssh_password is defined %}
