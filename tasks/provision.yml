@@ -20,67 +20,67 @@
 
 - block:
 
-  - name: create heat file contents
-    template:
-      src: stack.yml.j2
-      dest: "{{ temp_heat_file.path }}"
-    when: temp_heat_file.path is defined
+    - name: create heat file contents
+      template:
+        src: stack.yml.j2
+        dest: "{{ temp_heat_file.path }}"
+      when: temp_heat_file.path is defined
 
-  - name: create/update stack
-    os_stack:
-      name: "{{ nodes[0].app_name | default('stack') }}"
-      tag: "{{ nodes[0].app_name | replace(' ', '_') | default('stack') }}"
-      state: present
-      template: "{{ temp_heat_file.path }}"
-      parameters:
-        public_network_id: "{{ (openstack_networks |  selectattr('name', 'search', public_network_name) | list | first).id }}"
-    register: deploy
-    when:
-      - nodes is defined
-      - nodes[0] is defined
-      - temp_heat_file is defined
-      - temp_heat_file.path is defined
+    - name: create/update stack
+      os_stack:
+        name: "{{ nodes[0].app_name | default('stack') }}"
+        tag: "{{ nodes[0].app_name | replace(' ', '_') | default('stack') }}"
+        state: present
+        template: "{{ temp_heat_file.path }}"
+        parameters:
+          public_network_id: "{{ (openstack_networks |  selectattr('name', 'search', public_network_name) | list | first).id }}"
+      register: deploy
+      when:
+        - nodes is defined
+        - nodes[0] is defined
+        - temp_heat_file is defined
+        - temp_heat_file.path is defined
 
-  - name: waiting for servers to come online
-    wait_for:
-      host: "{{ item.output_value.public_ip }}"
-      port: "{{ item.output_value.ansible_port | default(ansible_port) }}"
-      timeout: "{{ instance_wait_connection_timeout }}"
-    with_items: "{{ deploy.stack.outputs }}"
-    when:
-      - nodes is defined
-      - deploy is defined
-      - deploy.stack is defined
-      - deploy.stack.outputs is defined
-      - "'public_ip' in item.output_key"
+    - name: waiting for servers to come online
+      wait_for:
+        host: "{{ item.output_value.public_ip }}"
+        port: "{{ item.output_value.ansible_port | default(ansible_port) }}"
+        timeout: "{{ instance_wait_connection_timeout }}"
+      with_items: "{{ deploy.stack.outputs }}"
+      when:
+        - nodes is defined
+        - deploy is defined
+        - deploy.stack is defined
+        - deploy.stack.outputs is defined
+        - "'public_ip' in item.output_key"
 
-  - name: waiting for windows systems to be available for connection
-    wait_for_connection:
-    vars:
-      ansible_port: 5986
-      ansible_connection: winrm
-      ansible_winrm_transport: credssp
-      ansible_winrm_server_cert_validation: ignore
-    delegate_to: "{{ item.output_value.public_ip }}"
-    with_items: "{{ deploy.stack.outputs }}"
-    ignore_errors: yes
-    when:
-      - nodes is defined
-      - deploy is defined
-      - deploy.stack is defined
-      - deploy.stack.outputs is defined
-      - "'public_ip' in item.output_key"
-      - item.output_value.ansible_port is defined
-      - item.output_value.ansible_port == 5986
+    - name: waiting for windows systems to be available for connection
+      wait_for_connection:
+      vars:
+        ansible_port: 5986
+        ansible_connection: winrm
+        ansible_winrm_transport: credssp
+        ansible_winrm_server_cert_validation: ignore
+      delegate_to: "{{ item.output_value.public_ip }}"
+      with_items: "{{ deploy.stack.outputs }}"
+      ignore_errors: yes
+      when:
+        - nodes is defined
+        - deploy is defined
+        - deploy.stack is defined
+        - deploy.stack.outputs is defined
+        - "'public_ip' in item.output_key"
+        - item.output_value.ansible_port is defined
+        - item.output_value.ansible_port == 5986
 
-- rescue:
+  rescue:
 
-  - debug:
-      msg: 'There was an issue creating stack'
+    - debug:
+        msg: 'There was an issue creating stack'
 
-- always:
+  always:
 
-  - name: remove temp heat file
-    file:
-      path: "{{ temp_heat_file.path }}"
-      state: absent
+    - name: remove temp heat file
+      file:
+        path: "{{ temp_heat_file.path }}"
+        state: absent
