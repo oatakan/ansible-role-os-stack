@@ -10,7 +10,7 @@
   when: st.stat.exists and st.stat.isreg
 
 - name: get network names
-  os_networks_facts:
+  os_networks_info:
 
 - name: create temporary heat file
   tempfile:
