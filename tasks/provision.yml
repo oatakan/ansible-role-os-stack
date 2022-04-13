@@ -10,7 +10,8 @@
   when: st.stat.exists and st.stat.isreg
 
 - name: get network names
-  os_networks_info:
+  openstack.cloud.networks_info:
+  register: os_network_info
 
 - name: create temporary heat file
   tempfile:
@@ -33,7 +34,7 @@
         state: present
         template: "{{ temp_heat_file.path }}"
         parameters:
-          public_network_id: "{{ (openstack_networks |  selectattr('name', 'search', public_network_name) | list | first).id }}"
+          public_network_id: "{{ (os_network_info.openstack_networks |  selectattr('name', 'search', public_network_name) | list | first).id }}"
       register: deploy
       when:
         - nodes is defined
