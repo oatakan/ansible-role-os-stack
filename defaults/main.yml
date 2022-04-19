@@ -10,3 +10,5 @@ instance_wait_connection_timeout: 600
 public_network_name: public
 
 config_file: "{{ lookup('env', 'OS_CLIENT_CONFIG_FILE') }}"
+
+wait_for_connection: true

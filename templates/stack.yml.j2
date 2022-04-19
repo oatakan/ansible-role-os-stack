@@ -33,8 +33,13 @@ resources:
     type: OS::Nova::Server
     depends_on: [ {% for nic in node.nics %}{{ node.name }}_port_{{ loop.index }},{% endfor %} ]
     properties:
+{% if node.image is defined %}
       image: {{ node.image }}
+{% endif %}
       flavor: {{ node.flavor }}
+{% if node.block_device_mapping_v2 is defined %}
+      block_device_mapping_v2: {{ node.block_device_mapping_v2 }}
+{% endif %}
       key_name: {{ node.key_name }}
       metadata:
         hostname: "{{ node.name }}"

@@ -2,7 +2,7 @@
 
 - name: check openstack config file
   stat:
-    path: "{{ config_file }}"
+    path: "{{ config_file | default('config_file') }}"
   register: st
 
 - name: include openstack details
@@ -49,6 +49,7 @@
         timeout: "{{ instance_wait_connection_timeout }}"
       with_items: "{{ deploy.stack.outputs }}"
       when:
+        - wait_for_connection
         - nodes is defined
         - deploy is defined
         - deploy.stack is defined
@@ -64,8 +65,9 @@
         ansible_winrm_server_cert_validation: ignore
       delegate_to: "{{ item.output_value.public_ip }}"
       with_items: "{{ deploy.stack.outputs }}"
-      ignore_errors: yes
+      ignore_errors: true
       when:
+        - wait_for_connection
         - nodes is defined
         - deploy is defined
         - deploy.stack is defined
