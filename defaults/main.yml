@@ -12,3 +12,5 @@ public_network_name: public
 config_file: "{{ lookup('env', 'OS_CLIENT_CONFIG_FILE') }}"
 
 wait_for_connection: true
+
+set_network_to_private: '([Activator]::CreateInstance([Type]::GetTypeFromCLSID([Guid]"{DCB00C01-570F-4A9B-8D69-199FDBA5723B}"))).GetNetworkConnections() | % {$_.GetNetwork().SetCategory(1)}'
