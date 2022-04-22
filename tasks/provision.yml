@@ -47,7 +47,7 @@
         host: "{{ item.output_value.public_ip }}"
         port: "{{ item.output_value.ansible_port | default(ansible_port) }}"
         timeout: "{{ instance_wait_connection_timeout }}"
-      with_items: "{{ deploy.stack.outputs }}"
+      loop: "{{ deploy.stack.outputs }}"
       when:
         - wait_for_connection
         - nodes is defined
@@ -64,7 +64,7 @@
         ansible_winrm_transport: credssp
         ansible_winrm_server_cert_validation: ignore
       delegate_to: "{{ item.output_value.public_ip }}"
-      with_items: "{{ deploy.stack.outputs }}"
+      loop: "{{ deploy.stack.outputs }}"
       ignore_errors: true
       when:
         - wait_for_connection
