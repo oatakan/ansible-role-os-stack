@@ -11,10 +11,11 @@
 
 - name: get network names
   openstack.cloud.networks_info:
+    validate_certs: false
   register: os_network_info
 
 - name: create temporary heat file
-  tempfile:
+  ansible.builtin.tempfile:
     state: file
     suffix: temp
   register: temp_heat_file
@@ -22,7 +23,7 @@
 - block:
 
     - name: create heat file contents
-      template:
+      ansible.builtin.template:
         src: stack.yml.j2
         dest: "{{ temp_heat_file.path }}"
       when: temp_heat_file.path is defined
@@ -34,7 +35,8 @@
         state: present
         template: "{{ temp_heat_file.path }}"
         parameters:
-          public_network_id: "{{ (os_network_info.openstack_networks |  selectattr('name', 'search', public_network_name) | list | first).id }}"
+          public_network_id: "{{ (os_network_info.networks |  selectattr('name', 'search', public_network_name) | list | first).id }}"
+        validate_certs: false
       register: deploy
       when:
         - nodes is defined

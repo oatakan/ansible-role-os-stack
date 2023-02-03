@@ -1,4 +1,4 @@
-heat_template_version: 2013-05-23
+heat_template_version: 2021-04-16
 
 description: >
   Deploys instance(s).
@@ -17,7 +17,7 @@ resources:
   {{ node.name }}_port_{{ loop.index }}:
     type: OS::Neutron::Port
     properties:
-      network_id: {{ (os_network_info.openstack_networks |  selectattr('name', 'search', nic['net-name']) | list | first).id }}
+      network_id: {{ (os_network_info.networks |  selectattr('name', 'search', nic['net-name']) | list | first).id }}
 
 {% endfor %}
 {% if node.auto_ip is not defined or (node.auto_ip is defined and node.auto_ip) %}

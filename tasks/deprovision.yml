@@ -13,6 +13,7 @@
   os_stack:
     name: "{{ nodes[0].app_name | default('stack') }}"
     state: absent
+    validate_certs: false
   register: undeploy
   when:
     - nodes is defined
