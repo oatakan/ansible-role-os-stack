@@ -10,7 +10,7 @@
   when: st.stat.exists and st.stat.isreg
 
 - name: delete stack
-  os_stack:
+  openstack.cloud.stack:
     name: "{{ nodes[0].app_name | default('stack') }}"
     state: absent
     validate_certs: false

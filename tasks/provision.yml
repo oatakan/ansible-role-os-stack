@@ -29,7 +29,7 @@
       when: temp_heat_file.path is defined
 
     - name: create/update stack
-      os_stack:
+      openstack.cloud.stack:
         name: "{{ nodes[0].app_name | default('stack') }}"
         tag: "{{ nodes[0].app_name | replace(' ', '_') | default('stack') }}"
         state: present
