@@ -8,7 +8,7 @@ galaxy_info:
 
   license: GPL-2.0-or-later
 
-  min_ansible_version: "1.2"
+  min_ansible_version: '2.9'
 
   platforms:
     - name: EL
@@ -16,7 +16,12 @@ galaxy_info:
         - all
 
   galaxy_tags:
-    - openstack
-    - heat
+    - rhel
+    - cloud
+    - system
+    - packaging
+    - development
+    - packer
+    - vmware
 
 dependencies: []

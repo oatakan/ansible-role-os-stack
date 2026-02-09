@@ -1,4 +1,8 @@
 ---
 
+exclude_paths:
+  - molecule/
+  - tests/
+
 skip_list:
   - yaml[empty-lines]

@@ -71,13 +71,42 @@
       delegate_to: localhost
       run_once: true
 
+    - name: Detect OS_AUTH_URL TLS mismatch hint
+      ansible.builtin.set_fact:
+        os_auth_url_tls_hint: >-
+          {{
+            (
+              'Hint: this looks like an http/https mismatch for OS_AUTH_URL '
+              ~ '(TLS handshake bytes returned to an HTTP client). '
+              ~ 'Check whether OS_AUTH_URL should be https://... '
+              ~ 'instead of http://... .'
+            )
+            if (
+              ((os_network_info.module_stderr | default('')) | regex_search('BadStatusLine'))
+              and (((os_network_info.module_stderr | default('')) | regex_search('\\x15\\x03\\x03|\u0015\u0003\u0003')))
+            )
+            else ''
+          }}
+      run_once: true
+
+    - name: Compute stderr preview
+      ansible.builtin.set_fact:
+        os_network_info_stderr_preview: >-
+          {{
+            (
+              os_network_info.module_stderr
+              | default(os_network_info.stderr | default(''))
+            ).splitlines()[:3] | join(' | ')
+          }}
+      run_once: true
+
     - name: Fail if OpenStack APIs are unreachable
       ansible.builtin.fail:
         msg: >-
           Preflight failed while contacting OpenStack.
-          {{ 'Hint: this looks like an http/https mismatch for OS_AUTH_URL (TLS handshake bytes returned to an HTTP client). Check whether OS_AUTH_URL should be https://... instead of http://... .' if (((os_network_info.module_stderr | default('')) | regex_search('BadStatusLine')) and (((os_network_info.module_stderr | default('')) | regex_search('\\\\x15\\\\x03\\\\x03|\u0015\u0003\u0003')))) else '' }}
+          {{ os_auth_url_tls_hint | default('') }}
           Error (summary): {{ (os_network_info.msg | default('unknown error')) }}
-          Details (first lines): {{ ((os_network_info.module_stderr | default(os_network_info.stderr | default(''))).splitlines()[:3]) | join(' | ') }}
+          Details (first lines): {{ os_network_info_stderr_preview | default('') }}
       when: >-
         (os_network_info.failed | default(false) | bool)
         or (os_network_info.networks is not defined)
@@ -93,7 +122,9 @@
         that:
           - public_network_name is defined
           - (os_network_info.networks | selectattr('name', 'equalto', public_network_name) | list | length) > 0
-        fail_msg: "No public network matched '{{ public_network_name }}'. Available networks: {{ os_network_info.networks | map(attribute='name') | list | sort }}"
+        fail_msg: >-
+          No public network matched '{{ public_network_name }}'.
+          Available networks: {{ os_network_info.networks | map(attribute='name') | list | sort }}
       run_once: true
 
     - name: Build required network name list
