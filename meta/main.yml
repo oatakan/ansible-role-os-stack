@@ -1,20 +1,19 @@
 ---
 galaxy_info:
   author: Orcun Atakan
+  namespace: oatakan
+  role_name: os_stack
   description: Ansible galaxy role for creating openstack instances via stack
   company: Red Hat
 
-  license: license (GPLv2, CC-BY, etc)
+  license: GPL-2.0-or-later
 
-  min_ansible_version: 1.2
+  min_ansible_version: "1.2"
 
   platforms:
     - name: EL
       versions:
         - all
-
-  categories:
-  - all
 
   galaxy_tags:
     - openstack

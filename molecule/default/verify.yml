@@ -1,0 +1,117 @@
+---
+- name: Verify
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    os_stack_validate_certs: false
+    molecule_stack_name: "molecule-os-stack-{{ lookup('env', 'USER') | default('user', true) }}"
+    molecule_base_count: "{{ lookup('env', 'OS_STACK_BASE_COUNT') | default('1', true) | int }}"
+
+  tasks:
+    - name: Lookup created stack
+      openstack.cloud.stack_info:
+        validate_certs: "{{ os_stack_validate_certs | default(true) | bool }}"
+        name: "{{ molecule_stack_name }}"
+      register: molecule_stack
+
+    - name: Assert stack exists
+      ansible.builtin.assert:
+        that:
+          - molecule_stack.stacks is defined
+          - molecule_stack.stacks | length == 1
+        fail_msg: "Expected stack '{{ molecule_stack_name }}' to exist, but it was not found"
+
+    - name: Wait for stack to be complete
+      openstack.cloud.stack_info:
+        validate_certs: "{{ os_stack_validate_certs | default(true) | bool }}"
+        name: "{{ molecule_stack_name }}"
+      register: molecule_stack
+      retries: 30
+      delay: 10
+      until: >-
+        (molecule_stack.stacks[0].stack_status
+          | default(molecule_stack.stacks[0].status, true)
+          | default('UNKNOWN', true))
+        in ['CREATE_COMPLETE', 'UPDATE_COMPLETE']
+
+    - name: Extract stack status and outputs
+      ansible.builtin.set_fact:
+        molecule_stack_record: "{{ molecule_stack.stacks[0] }}"
+        molecule_stack_status: >-
+          {{ molecule_stack.stacks[0].stack_status
+            | default(molecule_stack.stacks[0].status, true)
+            | default('UNKNOWN', true) }}
+
+    - name: Read stack outputs persisted during converge
+      ansible.builtin.slurp:
+        src: "{{ molecule_ephemeral_directory }}/stack_outputs.json"
+      register: molecule_stack_outputs_file
+
+    - name: Decode stack outputs
+      ansible.builtin.set_fact:
+        molecule_stack_outputs: >-
+          {{ (molecule_stack_outputs_file.content | b64decode | from_json)
+            | default([], true) }}
+
+    - name: Assert stack is complete
+      ansible.builtin.assert:
+        that:
+          - molecule_stack_status in ['CREATE_COMPLETE', 'UPDATE_COMPLETE']
+        fail_msg: >-
+          Stack '{{ molecule_stack_name }}' is not complete.
+          status={{ molecule_stack_status }}
+          keys={{ molecule_stack_record.keys() | list }}
+
+    - name: Assert role template produced expected output
+      ansible.builtin.assert:
+        that:
+          - molecule_base_count | int >= 1
+          - molecule_base_count | int <= 5
+        fail_msg: >-
+          OS_STACK_BASE_COUNT must be between 1 and 5.
+
+    - name: Assert outputs exist for expected baseline nodes
+      ansible.builtin.assert:
+        that:
+          - (molecule_stack_outputs | selectattr('output_key', 'equalto', item ~ '_public_ip') | list | length) == 1
+        fail_msg: >-
+          Expected output '{{ item }}_public_ip' in stack outputs.
+          Actual outputs: {{ molecule_stack_outputs | map(attribute='output_key') | list | default([]) }}
+      loop: "{{ range(1, (molecule_base_count | int) + 1) | list | map('regex_replace', '^', 'molecule') | list }}"
+
+    - name: Negative test - missing image fails preflight
+      block:
+        - name: Run role with a non-existent image
+          ansible.builtin.include_role:
+            name: ansible-role-os-stack
+          vars:
+            role_action: provision
+            wait_for_connection: false
+            public_network_name: "{{ lookup('env', 'OS_STACK_PUBLIC_NETWORK') | default('public', true) }}"
+            private_network_name: "{{ lookup('env', 'OS_STACK_PRIVATE_NETWORK') | default('private_network', true) }}"
+            nodes:
+              - name: "molecule-negative"
+                app_name: "{{ molecule_stack_name }}-negative"
+                role: "molecule"
+                os_type: "linux"
+                image: "__molecule_image_does_not_exist__"
+                flavor: "{{ lookup('env', 'OS_STACK_FLAVOR') | default('m1.small', true) }}"
+                key_name: >-
+                  {{ lookup('env', 'OS_PROV_KEY_NAME')
+                    | default(lookup('env', 'OS_STACK_KEYPAIR'), true) }}
+                nics:
+                  - net-name: "{{ private_network_name }}"
+                auto_ip: false
+
+        - name: Fail if role unexpectedly succeeded
+          ansible.builtin.fail:
+            msg: "Expected role to fail preflight due to missing image, but it succeeded"
+
+      rescue:
+        - name: Assert failure mentions missing image
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result is defined
+              - (ansible_failed_result | to_nice_json) is search('OpenStack image')
+            fail_msg: "Expected missing-image preflight error, got: {{ ansible_failed_result | to_nice_json }}"

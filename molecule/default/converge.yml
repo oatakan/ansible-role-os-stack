@@ -1,0 +1,89 @@
+---
+- name: Converge
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    role_action: provision
+    wait_for_connection: false
+
+    # Molecule often runs against lab OpenStack endpoints with self-signed certs.
+    # Keep secure default in the role, but disable verification for this scenario.
+    os_stack_validate_certs: false
+
+    # Keep the stack name unique per user/run.
+    molecule_stack_name: "molecule-os-stack-{{ lookup('env', 'USER') | default('user', true) }}"
+
+    public_network_name: "{{ lookup('env', 'OS_STACK_PUBLIC_NETWORK') | default('public', true) }}"
+    private_network_name: "{{ lookup('env', 'OS_STACK_PRIVATE_NETWORK') | default('private_network', true) }}"
+
+    # Baseline defaults (safe/portable)
+    molecule_base_count: "{{ lookup('env', 'OS_STACK_BASE_COUNT') | default('1', true) | int }}"
+    molecule_base_image: "{{ lookup('env', 'OS_STACK_IMAGE') | default('cirros 0.6', true) }}"
+    molecule_base_flavor: "{{ lookup('env', 'OS_STACK_FLAVOR') | default('m1.small', true) }}"
+
+  pre_tasks:
+    - name: Validate baseline node count
+      ansible.builtin.assert:
+        that:
+          - molecule_base_count | int >= 1
+          - molecule_base_count | int <= 5
+        fail_msg: >-
+          OS_STACK_BASE_COUNT must be between 1 and 5.
+
+    - name: Require OpenStack settings from environment
+      ansible.builtin.assert:
+        that:
+          - (lookup('env', 'OS_PROV_KEY_NAME') | default(lookup('env', 'OS_STACK_KEYPAIR'), true) | length) > 0
+        fail_msg: >-
+          Missing required env vars for Molecule.
+          Set OS_PROV_KEY_NAME (preferred) or OS_STACK_KEYPAIR.
+
+    - name: Require OpenStack credentials from environment
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'OS_AUTH_URL') | length > 0
+          - lookup('env', 'OS_USERNAME') | length > 0
+          - lookup('env', 'OS_PASSWORD') | length > 0
+          - lookup('env', 'OS_PROJECT_NAME') | length > 0
+        fail_msg: >-
+          Missing required OpenStack auth env vars.
+          Source your OpenStack env file (for example ~/.openstack/openrc.sh) before running Molecule.
+
+    - name: Initialize node list
+      ansible.builtin.set_fact:
+        nodes: []
+
+    - name: Add baseline nodes
+      ansible.builtin.set_fact:
+        nodes: >-
+          {{ nodes + [
+            {
+              'name': 'molecule' ~ item,
+              'app_name': molecule_stack_name,
+              'role': 'molecule',
+              'environment': 'dev',
+              'os_type': 'linux',
+              'image': molecule_base_image,
+              'flavor': molecule_base_flavor,
+              'key_name': (lookup('env', 'OS_PROV_KEY_NAME')
+                | default(lookup('env', 'OS_STACK_KEYPAIR'), true)),
+              'nics': [ {'net-name': private_network_name} ],
+              'auto_ip': true
+            }
+          ] }}
+      loop: "{{ range(1, (molecule_base_count | int) + 1) | list }}"
+
+  roles:
+    - role: ansible-role-os-stack
+
+  post_tasks:
+    - name: Persist stack outputs for verify phase
+      ansible.builtin.copy:
+        dest: "{{ molecule_ephemeral_directory }}/stack_outputs.json"
+        mode: '0600'
+        content: "{{ deploy.stack.outputs | default([]) | to_nice_json }}"
+      when:
+        - molecule_ephemeral_directory is defined
+        - deploy is defined
+        - deploy.stack is defined

@@ -1,0 +1,277 @@
+---
+- name: Converge (extended)
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    role_action: provision
+    wait_for_connection: false
+
+    # Molecule often runs against lab OpenStack endpoints with self-signed certs.
+    # Keep secure default in the role, but disable verification for this scenario.
+    os_stack_validate_certs: false
+
+    molecule_stack_name: "molecule-os-stack-extended-{{ lookup('env', 'USER') | default('user', true) }}"
+
+    public_network_name: "{{ lookup('env', 'OS_STACK_PUBLIC_NETWORK') | default('public', true) }}"
+    private_network_name: "{{ lookup('env', 'OS_STACK_PRIVATE_NETWORK') | default('private_network', true) }}"
+
+    # Baseline defaults (safe/portable)
+    molecule_base_count: "{{ lookup('env', 'OS_STACK_BASE_COUNT') | default('1', true) | int }}"
+    molecule_base_image: "{{ lookup('env', 'OS_STACK_IMAGE') | default('cirros 0.6', true) }}"
+    molecule_base_flavor: "{{ lookup('env', 'OS_STACK_FLAVOR') | default('m1.small', true) }}"
+
+  pre_tasks:
+    - name: Validate baseline node count
+      ansible.builtin.assert:
+        that:
+          - molecule_base_count | int >= 1
+          - molecule_base_count | int <= 5
+        fail_msg: >-
+          OS_STACK_BASE_COUNT must be between 1 and 5.
+
+    - name: Require OpenStack settings from environment
+      ansible.builtin.assert:
+        that:
+          - (lookup('env', 'OS_PROV_KEY_NAME') | default(lookup('env', 'OS_STACK_KEYPAIR'), true) | length) > 0
+        fail_msg: >-
+          Missing required env vars for Molecule.
+          Set OS_PROV_KEY_NAME (preferred) or OS_STACK_KEYPAIR.
+
+    - name: Require OpenStack credentials from environment
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'OS_AUTH_URL') | length > 0
+          - lookup('env', 'OS_USERNAME') | length > 0
+          - lookup('env', 'OS_PASSWORD') | length > 0
+          - lookup('env', 'OS_PROJECT_NAME') | length > 0
+        fail_msg: >-
+          Missing required OpenStack auth env vars.
+          Source your OpenStack env file (for example ~/.openstack/openrc.sh) before running Molecule.
+
+    - name: Query available images (best effort)
+      openstack.cloud.image_info:
+        validate_certs: "{{ os_stack_validate_certs | default(true) | bool }}"
+        filters:
+          status: active
+      register: molecule_os_images
+      failed_when: false
+      delegate_to: localhost
+      run_once: true
+
+    - name: Capture optional selection patterns
+      ansible.builtin.set_fact:
+        molecule_images_available: "{{ molecule_os_images.images | default([]) | map(attribute='name') | list | sort }}"
+        molecule_pattern_rhel: "{{ lookup('env','OS_STACK_IMAGE_PATTERN_RHEL') | default('', true) }}"
+        molecule_pattern_ubuntu: "{{ lookup('env','OS_STACK_IMAGE_PATTERN_UBUNTU') | default('', true) }}"
+        molecule_pattern_win_server: "{{ lookup('env','OS_STACK_IMAGE_PATTERN_WIN_SERVER') | default('', true) }}"
+        molecule_pattern_win_desktop: "{{ lookup('env','OS_STACK_IMAGE_PATTERN_WIN_DESKTOP') | default('', true) }}"
+        molecule_image_rhel: "{{ lookup('env','OS_STACK_IMAGE_RHEL') | default('', true) }}"
+        molecule_image_ubuntu: "{{ lookup('env','OS_STACK_IMAGE_UBUNTU') | default('', true) }}"
+        molecule_image_win_server: "{{ lookup('env','OS_STACK_IMAGE_WIN_SERVER') | default('', true) }}"
+        molecule_image_win_desktop: "{{ lookup('env','OS_STACK_IMAGE_WIN_DESKTOP') | default('', true) }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Select RHEL-like image from pattern (if needed)
+      ansible.builtin.set_fact:
+        molecule_image_rhel: >-
+          {{ (molecule_os_images.images | default([])
+            | selectattr('name', 'search', molecule_pattern_rhel)
+            | map(attribute='name') | list | sort | first | default('')) }}
+      when:
+        - molecule_image_rhel | length == 0
+        - molecule_pattern_rhel | length > 0
+      delegate_to: localhost
+      run_once: true
+
+    - name: Select Ubuntu-like image from pattern (if needed)
+      ansible.builtin.set_fact:
+        molecule_image_ubuntu: >-
+          {{ (molecule_os_images.images | default([])
+            | selectattr('name', 'search', molecule_pattern_ubuntu)
+            | map(attribute='name') | list | sort | first | default('')) }}
+      when:
+        - molecule_image_ubuntu | length == 0
+        - molecule_pattern_ubuntu | length > 0
+      delegate_to: localhost
+      run_once: true
+
+    - name: Select Windows Server image from pattern (if needed)
+      ansible.builtin.set_fact:
+        molecule_image_win_server: >-
+          {{ (molecule_os_images.images | default([])
+            | selectattr('name', 'search', molecule_pattern_win_server)
+            | map(attribute='name') | list | sort | first | default('')) }}
+      when:
+        - molecule_image_win_server | length == 0
+        - molecule_pattern_win_server | length > 0
+      delegate_to: localhost
+      run_once: true
+
+    - name: Select Windows Desktop image from pattern (if needed)
+      ansible.builtin.set_fact:
+        molecule_image_win_desktop: >-
+          {{ (molecule_os_images.images | default([])
+            | selectattr('name', 'search', molecule_pattern_win_desktop)
+            | map(attribute='name') | list | sort | first | default('')) }}
+      when:
+        - molecule_image_win_desktop | length == 0
+        - molecule_pattern_win_desktop | length > 0
+      delegate_to: localhost
+      run_once: true
+
+    - name: Initialize extended node list
+      ansible.builtin.set_fact:
+        molecule_extended_nodes: []
+      run_once: true
+
+    - name: Add baseline nodes
+      ansible.builtin.set_fact:
+        molecule_extended_nodes: >-
+          {{ molecule_extended_nodes + [
+            {
+              'name': 'molecule' ~ item,
+              'app_name': molecule_stack_name,
+              'role': 'molecule',
+              'environment': 'dev',
+              'os_type': 'linux',
+              'image': molecule_base_image,
+              'flavor': molecule_base_flavor,
+              'key_name': (lookup('env', 'OS_PROV_KEY_NAME')
+                | default(lookup('env', 'OS_STACK_KEYPAIR'), true)),
+              'nics': [ {'net-name': private_network_name} ],
+              'auto_ip': true
+            }
+          ] }}
+      run_once: true
+      loop: "{{ range(1, (molecule_base_count | int) + 1) | list }}"
+
+    - name: Add RHEL-like node (if image discovered)
+      ansible.builtin.set_fact:
+        molecule_extended_nodes: >-
+          {{ molecule_extended_nodes + [
+            {
+              'name': 'rhel1',
+              'app_name': molecule_stack_name,
+              'role': 'molecule',
+              'environment': 'dev',
+              'os_type': 'linux',
+              'image': molecule_image_rhel,
+              'flavor': (lookup('env', 'OS_STACK_FLAVOR_RHEL')
+                | default(lookup('env', 'OS_STACK_FLAVOR'), true)
+                | default(molecule_base_flavor, true)),
+              'key_name': (lookup('env', 'OS_PROV_KEY_NAME')
+                | default(lookup('env', 'OS_STACK_KEYPAIR'), true)),
+              'nics': [ {'net-name': private_network_name} ],
+              'auto_ip': true
+            }
+          ] }}
+      when: molecule_image_rhel | length > 0
+      run_once: true
+
+    - name: Add Ubuntu-like node (if image discovered)
+      ansible.builtin.set_fact:
+        molecule_extended_nodes: >-
+          {{ molecule_extended_nodes + [
+            {
+              'name': 'ubuntu1',
+              'app_name': molecule_stack_name,
+              'role': 'molecule',
+              'environment': 'dev',
+              'os_type': 'linux',
+              'image': molecule_image_ubuntu,
+              'flavor': (lookup('env', 'OS_STACK_FLAVOR_UBUNTU')
+                | default(lookup('env', 'OS_STACK_FLAVOR'), true)
+                | default(molecule_base_flavor, true)),
+              'key_name': (lookup('env', 'OS_PROV_KEY_NAME')
+                | default(lookup('env', 'OS_STACK_KEYPAIR'), true)),
+              'nics': [ {'net-name': private_network_name} ],
+              'auto_ip': true
+            }
+          ] }}
+      when: molecule_image_ubuntu | length > 0
+      run_once: true
+
+    - name: Add Windows Server node (if image discovered and flavor provided)
+      ansible.builtin.set_fact:
+        molecule_extended_nodes: >-
+          {{ molecule_extended_nodes + [
+            {
+              'name': 'winserver1',
+              'app_name': molecule_stack_name,
+              'role': 'molecule',
+              'environment': 'dev',
+              'os_type': 'windows',
+              'image': molecule_image_win_server,
+              'flavor': lookup('env', 'OS_STACK_FLAVOR_WIN_SERVER'),
+              'key_name': (lookup('env', 'OS_PROV_KEY_NAME')
+                | default(lookup('env', 'OS_STACK_KEYPAIR'), true)),
+              'nics': [ {'net-name': private_network_name} ],
+              'auto_ip': true
+            }
+          ] }}
+      when:
+        - molecule_image_win_server | length > 0
+        - (lookup('env', 'OS_STACK_FLAVOR_WIN_SERVER') | default('', true) | length) > 0
+      run_once: true
+
+    - name: Add Windows Desktop node (if image discovered and flavor provided)
+      ansible.builtin.set_fact:
+        molecule_extended_nodes: >-
+          {{ molecule_extended_nodes + [
+            {
+              'name': 'windesktop1',
+              'app_name': molecule_stack_name,
+              'role': 'molecule',
+              'environment': 'dev',
+              'os_type': 'windows',
+              'image': molecule_image_win_desktop,
+              'flavor': lookup('env', 'OS_STACK_FLAVOR_WIN_DESKTOP'),
+              'key_name': (lookup('env', 'OS_PROV_KEY_NAME')
+                | default(lookup('env', 'OS_STACK_KEYPAIR'), true)),
+              'nics': [ {'net-name': private_network_name} ],
+              'auto_ip': true
+            }
+          ] }}
+      when:
+        - molecule_image_win_desktop | length > 0
+        - (lookup('env', 'OS_STACK_FLAVOR_WIN_DESKTOP') | default('', true) | length) > 0
+      run_once: true
+
+    - name: Show which extra images were selected (debug)
+      ansible.builtin.debug:
+        msg:
+          images_available_count: "{{ molecule_images_available | length }}"
+          selected:
+            rhel: "{{ molecule_image_rhel | default('') }}"
+            ubuntu: "{{ molecule_image_ubuntu | default('') }}"
+            win_server: "{{ molecule_image_win_server | default('') }}"
+            win_desktop: "{{ molecule_image_win_desktop | default('') }}"
+          nodes: "{{ molecule_extended_nodes | map(attribute='name') | list }}"
+      when: lookup('env', 'MOLECULE_EXTENDED_DEBUG') | default('', true) | length > 0
+
+  roles:
+    - role: ansible-role-os-stack
+      vars:
+        nodes: "{{ molecule_extended_nodes }}"
+
+  post_tasks:
+    - name: Persist stack outputs for verify phase
+      ansible.builtin.copy:
+        dest: "{{ molecule_ephemeral_directory }}/stack_outputs.json"
+        mode: '0600'
+        content: "{{ deploy.stack.outputs | default([]) | to_nice_json }}"
+      when:
+        - molecule_ephemeral_directory is defined
+        - deploy is defined
+        - deploy.stack is defined
+
+    - name: Persist selected node names for verify phase
+      ansible.builtin.copy:
+        dest: "{{ molecule_ephemeral_directory }}/selected_nodes.json"
+        mode: '0600'
+        content: "{{ molecule_extended_nodes | map(attribute='name') | list | to_nice_json }}"
+      when:
+        - molecule_ephemeral_directory is defined
+        - molecule_extended_nodes is defined

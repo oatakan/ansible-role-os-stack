@@ -1,20 +1,63 @@
 ---
 
-- name: check openstack config file
-  stat:
+- name: Check OpenStack config file (if provided)
+  ansible.builtin.stat:
     path: "{{ config_file }}"
-  register: st
+  register: os_stack_config_stat
+  when:
+    - config_file is defined
+    - config_file | length > 0
 
-- name: include openstack details
-  include_vars: "{{ config_file }}"
-  when: st.stat.exists and st.stat.isreg
+- name: Fail if OpenStack config file is missing
+  ansible.builtin.fail:
+    msg: "OpenStack config file not found at '{{ config_file }}' (set OS_CLIENT_CONFIG_FILE or update config_file)"
+  when:
+    - config_file is defined
+    - config_file | length > 0
+    - not os_stack_config_stat.stat.exists
 
-- name: delete stack
+- name: Include OpenStack details (if config file exists)
+  ansible.builtin.include_vars: "{{ config_file }}"
+  when:
+    - config_file is defined
+    - config_file | length > 0
+    - os_stack_config_stat.stat.exists
+    - os_stack_config_stat.stat.isreg
+
+- name: Delete stack
   openstack.cloud.stack:
     name: "{{ nodes[0].app_name | default('stack') }}"
     state: absent
-    validate_certs: false
+    validate_certs: "{{ os_stack_validate_certs | default(true) | bool }}"
   register: undeploy
   when:
     - nodes is defined
     - nodes[0] is defined
+    - not (os_stack_deprovision_best_effort | default(false) | bool)
+  delegate_to: localhost
+  run_once: true
+
+- name: Delete stack (best effort)
+  openstack.cloud.stack:
+    name: "{{ nodes[0].app_name | default('stack') }}"
+    state: absent
+    validate_certs: "{{ os_stack_validate_certs | default(true) | bool }}"
+  register: undeploy_best_effort
+  failed_when: false
+  when:
+    - nodes is defined
+    - nodes[0] is defined
+    - (os_stack_deprovision_best_effort | default(false) | bool)
+  delegate_to: localhost
+  run_once: true
+
+- name: Warn if stack deletion could not run (best effort)
+  ansible.builtin.debug:
+    msg: >-
+      Best-effort deprovision could not delete the stack. This usually means OpenStack
+      authentication/endpoint connectivity is broken (for example http/https mismatch).
+      Error: {{ (undeploy_best_effort.msg | default(undeploy_best_effort.module_stderr | default('unknown error'))) }}
+  when:
+    - (os_stack_deprovision_best_effort | default(false) | bool)
+    - undeploy_best_effort is defined
+    - undeploy_best_effort.failed | default(false) | bool

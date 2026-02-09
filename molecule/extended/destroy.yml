@@ -1,0 +1,18 @@
+---
+- name: Destroy (extended)
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    role_action: deprovision
+    wait_for_connection: false
+    os_stack_deprovision_best_effort: true
+    os_stack_validate_certs: false
+
+    molecule_stack_name: "molecule-os-stack-extended-{{ lookup('env', 'USER') | default('user', true) }}"
+
+    nodes:
+      - app_name: "{{ molecule_stack_name }}"
+
+  roles:
+    - role: ansible-role-os-stack

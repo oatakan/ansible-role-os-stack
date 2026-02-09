@@ -1,0 +1,70 @@
+---
+- name: Verify (extended)
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    os_stack_validate_certs: false
+    molecule_stack_name: "molecule-os-stack-extended-{{ lookup('env', 'USER') | default('user', true) }}"
+    molecule_stack_retries: "{{ lookup('env', 'MOLECULE_EXTENDED_STACK_RETRIES') | default('90', true) | int }}"
+    molecule_stack_delay: "{{ lookup('env', 'MOLECULE_EXTENDED_STACK_DELAY') | default('10', true) | int }}"
+
+  tasks:
+    - name: Lookup created stack
+      openstack.cloud.stack_info:
+        validate_certs: "{{ os_stack_validate_certs | default(true) | bool }}"
+        name: "{{ molecule_stack_name }}"
+      register: molecule_stack
+
+    - name: Assert stack exists
+      ansible.builtin.assert:
+        that:
+          - molecule_stack.stacks is defined
+          - molecule_stack.stacks | length == 1
+        fail_msg: "Expected stack '{{ molecule_stack_name }}' to exist, but it was not found"
+
+    - name: Wait for stack to be complete
+      openstack.cloud.stack_info:
+        validate_certs: "{{ os_stack_validate_certs | default(true) | bool }}"
+        name: "{{ molecule_stack_name }}"
+      register: molecule_stack
+      retries: "{{ molecule_stack_retries }}"
+      delay: "{{ molecule_stack_delay }}"
+      until: >-
+        (molecule_stack.stacks[0].stack_status
+          | default(molecule_stack.stacks[0].status, true)
+          | default('UNKNOWN', true))
+        in ['CREATE_COMPLETE', 'UPDATE_COMPLETE']
+
+    - name: Read stack outputs persisted during converge
+      ansible.builtin.slurp:
+        src: "{{ molecule_ephemeral_directory }}/stack_outputs.json"
+      register: molecule_stack_outputs_file
+
+    - name: Read selected node list persisted during converge
+      ansible.builtin.slurp:
+        src: "{{ molecule_ephemeral_directory }}/selected_nodes.json"
+      register: molecule_selected_nodes_file
+
+    - name: Decode stack outputs
+      ansible.builtin.set_fact:
+        molecule_stack_outputs: >-
+          {{ (molecule_stack_outputs_file.content | b64decode | from_json)
+            | default([], true) }}
+
+    - name: Decode selected node list
+      ansible.builtin.set_fact:
+        molecule_selected_nodes: >-
+          {{ (molecule_selected_nodes_file.content | b64decode | from_json)
+            | default(['molecule1'], true) }}
+
+    - name: Collect output keys
+      ansible.builtin.set_fact:
+        molecule_stack_output_keys: "{{ molecule_stack_outputs | map(attribute='output_key') | list | default([]) }}"
+
+    - name: Assert outputs exist for selected nodes
+      ansible.builtin.assert:
+        that:
+          - (molecule_stack_output_keys | select('equalto', item ~ '_public_ip') | list | length) == 1
+        fail_msg: "Expected output '{{ item }}_public_ip'. Outputs: {{ molecule_stack_output_keys }}"
+      loop: "{{ molecule_selected_nodes | default(['molecule1']) }}"

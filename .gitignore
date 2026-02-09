@@ -1,0 +1,48 @@
+# IDEs / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+.env/
+.env.*
+.envrc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Ansible
+*.retry
+ansible.cfg
+.ansible/
+
+# OpenStack creds/config (never commit)
+clouds.yaml
+clouds.yml
+secure.yaml
+secure.yml
+openrc
+openrc.*
+*openrc*
+
+# Common build / misc
+*.log
+*.tmp
+.cache/
+
+# Molecule
+.molecule/
+molecule/**/.cache/
+molecule/**/.pytest_cache/

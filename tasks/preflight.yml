@@ -1,0 +1,176 @@
+---
+
+- name: Validate required inputs
+  ansible.builtin.assert:
+    that:
+      - nodes is defined
+      - nodes | length > 0
+    fail_msg: "`nodes` must be defined and non-empty"
+  run_once: true
+
+- name: Validate node structure
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.flavor is defined
+      - item.key_name is defined
+      - item.nics is defined
+      - item.nics | length > 0
+    fail_msg: >-
+      Each node must define name, flavor, key_name, and a non-empty nics list.
+      Offending node: {{ item | to_nice_json }}
+  loop: "{{ nodes }}"
+  run_once: true
+
+- name: Validate nic structure
+  ansible.builtin.assert:
+    that:
+      - item.1['net-name'] is defined
+    fail_msg: "Each nic must define 'net-name'. Offending nic: {{ item.1 | to_nice_json }}"
+  loop: "{{ query('subelements', nodes, 'nics', {'skip_missing': True}) }}"
+  run_once: true
+
+- name: Check OpenStack config file (if provided)
+  ansible.builtin.stat:
+    path: "{{ config_file }}"
+  register: os_stack_config_stat
+  when:
+    - config_file is defined
+    - config_file | length > 0
+  delegate_to: localhost
+  run_once: true
+
+- name: Fail if OpenStack config file is missing
+  ansible.builtin.fail:
+    msg: "OpenStack config file not found at '{{ config_file }}' (set OS_CLIENT_CONFIG_FILE or update config_file)"
+  when:
+    - config_file is defined
+    - config_file | length > 0
+    - not os_stack_config_stat.stat.exists
+  delegate_to: localhost
+  run_once: true
+
+- name: Include OpenStack details (if config file exists)
+  ansible.builtin.include_vars: "{{ config_file }}"
+  when:
+    - config_file is defined
+    - config_file | length > 0
+    - os_stack_config_stat.stat.exists
+    - os_stack_config_stat.stat.isreg
+  delegate_to: localhost
+  run_once: true
+
+
+- name: Query OpenStack for required resources
+  block:
+    - name: Get network list
+      openstack.cloud.networks_info:
+        validate_certs: "{{ os_stack_validate_certs | default(true) | bool }}"
+      register: os_network_info
+      failed_when: false
+      delegate_to: localhost
+      run_once: true
+
+    - name: Fail if OpenStack APIs are unreachable
+      ansible.builtin.fail:
+        msg: >-
+          Preflight failed while contacting OpenStack.
+          {{ 'Hint: this looks like an http/https mismatch for OS_AUTH_URL (TLS handshake bytes returned to an HTTP client). Check whether OS_AUTH_URL should be https://... instead of http://... .' if (((os_network_info.module_stderr | default('')) | regex_search('BadStatusLine')) and (((os_network_info.module_stderr | default('')) | regex_search('\\\\x15\\\\x03\\\\x03|\u0015\u0003\u0003')))) else '' }}
+          Error (summary): {{ (os_network_info.msg | default('unknown error')) }}
+          Details (first lines): {{ ((os_network_info.module_stderr | default(os_network_info.stderr | default(''))).splitlines()[:3]) | join(' | ') }}
+      when: >-
+        (os_network_info.failed | default(false) | bool)
+        or (os_network_info.networks is not defined)
+
+    - name: Resolve public network id
+      ansible.builtin.set_fact:
+        public_network_id: "{{ (os_network_info.networks | selectattr('name', 'equalto', public_network_name) | list | first).id }}"
+      when: public_network_name is defined
+      run_once: true
+
+    - name: Validate public network exists
+      ansible.builtin.assert:
+        that:
+          - public_network_name is defined
+          - (os_network_info.networks | selectattr('name', 'equalto', public_network_name) | list | length) > 0
+        fail_msg: "No public network matched '{{ public_network_name }}'. Available networks: {{ os_network_info.networks | map(attribute='name') | list | sort }}"
+      run_once: true
+
+    - name: Build required network name list
+      ansible.builtin.set_fact:
+        required_network_names: "{{ (required_network_names | default([])) + [item.1['net-name']] }}"
+      loop: "{{ query('subelements', nodes, 'nics', {'skip_missing': True}) }}"
+      run_once: true
+
+    - name: Validate all referenced nic networks exist
+      ansible.builtin.assert:
+        that:
+          - (os_network_info.networks | selectattr('name', 'equalto', item) | list | length) > 0
+        fail_msg: >-
+          Network '{{ item }}' referenced by nodes[].nics[] was not found.
+          Available networks: {{ os_network_info.networks | map(attribute='name') | list | sort }}
+      loop: "{{ required_network_names | default([]) | unique | list }}"
+      run_once: true
+
+    - name: Build unique image/flavor/keypair lists
+      ansible.builtin.set_fact:
+        required_images: "{{ nodes | selectattr('image', 'defined') | map(attribute='image') | list | unique }}"
+        required_flavors: "{{ nodes | map(attribute='flavor') | list | unique }}"
+        required_keypairs: "{{ nodes | map(attribute='key_name') | list | unique }}"
+      run_once: true
+
+    - name: Lookup images
+      openstack.cloud.image_info:
+        validate_certs: "{{ os_stack_validate_certs | default(true) | bool }}"
+        name: "{{ item }}"
+      register: os_stack_image_info
+      loop: "{{ required_images | default([]) }}"
+      when: (required_images | default([]) | length) > 0
+      delegate_to: localhost
+      run_once: true
+
+    - name: Fail if any image is missing
+      ansible.builtin.assert:
+        that:
+          - (item.images | default([]) | length) > 0
+        fail_msg: "OpenStack image '{{ item.item }}' not found"
+      loop: "{{ os_stack_image_info.results | default([]) }}"
+      when: os_stack_image_info is defined
+      run_once: true
+
+    - name: Lookup flavors
+      openstack.cloud.compute_flavor_info:
+        validate_certs: "{{ os_stack_validate_certs | default(true) | bool }}"
+        name: "{{ item }}"
+      register: os_stack_flavor_info
+      loop: "{{ required_flavors | default([]) }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Fail if any flavor is missing
+      ansible.builtin.assert:
+        that:
+          - (item.flavors | default([]) | length) > 0
+        fail_msg: "OpenStack flavor '{{ item.item }}' not found"
+      loop: "{{ os_stack_flavor_info.results | default([]) }}"
+      run_once: true
+
+    - name: Lookup keypairs
+      openstack.cloud.keypair_info:
+        validate_certs: "{{ os_stack_validate_certs | default(true) | bool }}"
+        name: "{{ item }}"
+      register: os_stack_keypair_info
+      loop: "{{ required_keypairs | default([]) }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Fail if any keypair is missing
+      ansible.builtin.assert:
+        that:
+          - (item.keypairs | default([]) | length) > 0
+        fail_msg: "OpenStack keypair '{{ item.item }}' not found"
+      loop: "{{ os_stack_keypair_info.results | default([]) }}"
+      run_once: true
+
+
+

@@ -1,7 +1,9 @@
 ---
 
-- include_tasks: provision.yml
+- name: Include provision tasks
+  ansible.builtin.include_tasks: provision.yml
   when: role_action == 'provision'
 
-- include_tasks: deprovision.yml
+- name: Include deprovision tasks
+  ansible.builtin.include_tasks: deprovision.yml
   when: role_action == 'deprovision'

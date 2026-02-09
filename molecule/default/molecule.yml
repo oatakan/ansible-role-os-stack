@@ -1,0 +1,36 @@
+---
+dependency:
+  name: galaxy
+  options:
+    requirements-file: molecule/default/requirements.yml
+
+scenario:
+  test_sequence:
+    - dependency
+    - destroy
+    - converge
+    - verify
+    - destroy
+
+driver:
+  name: default
+
+platforms:
+  []
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_CONFIG: ${MOLECULE_SCENARIO_DIRECTORY}/ansible.cfg
+    ANSIBLE_ROLES_PATH: ${MOLECULE_PROJECT_DIRECTORY}/..:~/.ansible/roles:/etc/ansible/roles:/usr/share/ansible/roles
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
+  playbooks:
+    converge: converge.yml
+    destroy: destroy.yml
+    verify: verify.yml
+
+verifier:
+  name: ansible

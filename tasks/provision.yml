@@ -1,51 +1,63 @@
 ---
 
-- name: check openstack config file
-  stat:
-    path: "{{ config_file | default('config_file') }}"
-  register: st
+- name: Preflight checks
+  ansible.builtin.include_tasks: preflight.yml
 
-- name: include openstack details
-  include_vars: "{{ config_file }}"
-  when: st.stat.exists and st.stat.isreg
-
-- name: get network names
-  openstack.cloud.networks_info:
-    validate_certs: false
-  register: os_network_info
-
-- name: create temporary heat file
+- name: Create temporary Heat file
   ansible.builtin.tempfile:
     state: file
     suffix: temp
   register: temp_heat_file
+  delegate_to: localhost
+  run_once: true
 
-- block:
+- name: Provision stack
+  block:
 
-    - name: create heat file contents
+    - name: Create Heat template contents
       ansible.builtin.template:
         src: stack.yml.j2
         dest: "{{ temp_heat_file.path }}"
+        mode: '0600'
       when: temp_heat_file.path is defined
+      delegate_to: localhost
+      run_once: true
 
-    - name: create/update stack
+    - name: Create or update stack
       openstack.cloud.stack:
         name: "{{ nodes[0].app_name | default('stack') }}"
         tag: "{{ nodes[0].app_name | replace(' ', '_') | default('stack') }}"
         state: present
         template: "{{ temp_heat_file.path }}"
         parameters:
-          public_network_id: "{{ (os_network_info.networks |  selectattr('name', 'search', public_network_name) | list | first).id }}"
-        validate_certs: false
+          public_network_id: "{{ public_network_id }}"
+        validate_certs: "{{ os_stack_validate_certs | default(true) | bool }}"
       register: deploy
+      failed_when: false
+      until: >-
+        (not (deploy.failed | default(false)))
+        or ((deploy.msg | default('')) is not search('504 Gateway Time-out'))
+      retries: 5
+      delay: 15
       when:
         - nodes is defined
         - nodes[0] is defined
         - temp_heat_file is defined
         - temp_heat_file.path is defined
+      delegate_to: localhost
+      run_once: true
 
-    - name: waiting for servers to come online
-      wait_for:
+    - name: Fail if stack create/update failed
+      ansible.builtin.fail:
+        msg: >-
+          Failed to create/update OpenStack stack '{{ nodes[0].app_name | default('stack') }}'.
+          Error: {{ deploy.msg | default(deploy) }}
+      when:
+        - deploy is defined
+        - deploy.failed | default(false)
+
+    - name: Wait for servers to come online
+      ansible.builtin.wait_for:
         host: "{{ item.output_value.public_ip }}"
         port: "{{ item.output_value.ansible_port | default(ansible_port) }}"
         timeout: "{{ instance_wait_connection_timeout }}"
@@ -58,8 +70,8 @@
         - deploy.stack.outputs is defined
         - "'public_ip' in item.output_key"
 
-    - name: waiting for windows systems to be available for connection
-      wait_for_connection:
+    - name: Wait for Windows systems to be available for connection
+      ansible.builtin.wait_for_connection:
       vars:
         ansible_port: 5986
         ansible_connection: winrm
@@ -67,7 +79,7 @@
         ansible_winrm_server_cert_validation: ignore
       delegate_to: "{{ item.output_value.public_ip }}"
       loop: "{{ deploy.stack.outputs }}"
-      ignore_errors: true
+      failed_when: false
       when:
         - wait_for_connection
         - nodes is defined
@@ -80,12 +92,25 @@
 
   rescue:
 
-    - debug:
-        msg: 'There was an issue creating stack'
+    - name: Surface root cause
+      ansible.builtin.debug:
+        var: ansible_failed_result
+
+    - name: Fail with actionable message
+      ansible.builtin.fail:
+        msg: >-
+          Failed to create/update OpenStack stack '{{ (nodes[0].app_name | default('stack')) if (nodes is defined and nodes | length > 0) else 'stack' }}'.
+          Preflight should have validated referenced networks/images/flavors/keypairs.
+          Error: {{ (ansible_failed_result.msg | default(ansible_failed_result)) }}
 
   always:
 
-    - name: remove temp heat file
-      file:
+    - name: Remove temp Heat file
+      ansible.builtin.file:
         path: "{{ temp_heat_file.path }}"
         state: absent
+      when:
+        - temp_heat_file is defined
+        - temp_heat_file.path is defined
+      delegate_to: localhost
+      run_once: true
