@@ -142,6 +142,8 @@
       ansible.builtin.fail:
         msg: >-
           Preflight failed while contacting OpenStack.
+          Effective validate_certs: {{ os_stack_validate_certs | default(true) | bool }}
+          OS_INSECURE: {{ lookup('env', 'OS_INSECURE') | default('unset', true) }}
           {{ os_auth_url_tls_hint | default('') }}
           {{ os_cert_hint | default('') }}
           {{ os_proxy_hint | default('') }}
