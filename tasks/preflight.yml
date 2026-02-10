@@ -100,11 +100,51 @@
           }}
       run_once: true
 
+    - name: Detect certificate verification hint
+      ansible.builtin.set_fact:
+        os_cert_hint: >-
+          {{
+            (
+              'Hint: this looks like TLS certificate verification failing from the execution environment. '
+              ~ 'If you use an internal/self-signed CA, either provide that CA to the AAP Execution Environment '
+              ~ '(e.g. via OS_CACERT/REQUESTS_CA_BUNDLE) or set os_stack_validate_certs=false for this job. '
+              ~ 'Default is secure (true).'
+            )
+            if (
+              (
+                (os_network_info.module_stderr | default(''))
+                ~ (os_network_info.msg | default(''))
+              ) | regex_search('CERTIFICATE_VERIFY_FAILED|self[- ]signed certificate|SSLError')
+            )
+            else ''
+          }}
+      run_once: true
+
+    - name: Detect proxy/NO_PROXY hint
+      ansible.builtin.set_fact:
+        os_proxy_hint: >-
+          {{
+            (
+              'Hint: a proxy may be in use in AAP/EE (HTTP(S)_PROXY). If Keystone is on a private IP, '
+              ~ 'ensure NO_PROXY includes the Keystone host/IP (and related OpenStack endpoints), or disable the proxy for this job.'
+            )
+            if (
+              (
+                (os_network_info.module_stderr | default(''))
+                ~ (os_network_info.msg | default(''))
+              ) | regex_search('ProxyError|proxy')
+            )
+            else ''
+          }}
+      run_once: true
+
     - name: Fail if OpenStack APIs are unreachable
       ansible.builtin.fail:
         msg: >-
           Preflight failed while contacting OpenStack.
           {{ os_auth_url_tls_hint | default('') }}
+          {{ os_cert_hint | default('') }}
+          {{ os_proxy_hint | default('') }}
           Error (summary): {{ (os_network_info.msg | default('unknown error')) }}
           Details (first lines): {{ os_network_info_stderr_preview | default('') }}
       when: >-
